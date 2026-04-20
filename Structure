@@ -1,0 +1,21 @@
+Credit-Scoring-Model/
+│
+├── data/
+│   ├── cs-training.csv
+│   └── cs-test.csv
+│
+├── src/
+│   ├── preprocess.py
+│   ├── features.py
+│   ├── train.py
+│   └── predict.py
+│
+├── models/
+│   └── best_model.pkl
+│
+├── outputs/
+│   └── submission.csv
+│
+├── main.py
+├── requirements.txt
+└── README.md
