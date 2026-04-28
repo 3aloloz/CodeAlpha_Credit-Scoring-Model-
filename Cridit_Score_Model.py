@@ -1,0 +1,149 @@
+# ================================
+# 1. IMPORT LIBRARIES
+# ================================
+import pandas as pd
+import numpy as np
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import classification_report, roc_auc_score
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+
+from imblearn.over_sampling import SMOTE
+
+# ================================
+# 2. LOAD DATA (CHANGE PATH IF NEEDED)
+# ================================
+train = pd.read_csv("D:\\CodeAlpha_Tasks\\Cridit_Scoring_Model\\TrainData\\cs-training.csv")
+test = pd.read_csv("D:\\CodeAlpha_Tasks\\Cridit_Scoring_Model\\TestData\\cs-test.csv")
+
+# ================================
+# 3. FEATURE ENGINEERING
+# ================================
+def feature_engineering(df):
+    df = df.copy()
+
+    df["DebtRatio_income"] = df["DebtRatio"] / (df["MonthlyIncome"] + 1)
+    df["Income_per_dependent"] = df["MonthlyIncome"] / (df["NumberOfDependents"] + 1)
+
+    df["TotalLatePayments"] = (
+        df["NumberOfTime30-59DaysPastDueNotWorse"] +
+        df["NumberOfTime60-89DaysPastDueNotWorse"] +
+        df["NumberOfTimes90DaysLate"]
+    )
+
+    return df
+
+# ================================
+# 4. DATA PREPROCESSING
+# ================================
+def preprocess(train, test):
+
+    # Fill missing values
+    train["MonthlyIncome"].fillna(train["MonthlyIncome"].median(), inplace=True)
+    test["MonthlyIncome"].fillna(train["MonthlyIncome"].median(), inplace=True)
+
+    train["NumberOfDependents"].fillna(0, inplace=True)
+    test["NumberOfDependents"].fillna(0, inplace=True)
+
+    # Remove invalid ages
+    train = train[train["age"] > 18]
+
+    # Feature engineering
+    train = feature_engineering(train)
+    test = feature_engineering(test)
+
+    # Split features/target
+    X = train.drop("SeriousDlqin2yrs", axis=1)
+    y = train["SeriousDlqin2yrs"]
+
+    # Ensure same columns
+    test = test[X.columns]
+
+    return X, y, test
+
+# ================================
+# 5. TRAINING PIPELINE
+# ================================
+def train_models(X, y, test):
+
+    # Train-test split
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y, test_size=0.2, stratify=y, random_state=42
+    )
+
+    # Handle imbalance
+    smote = SMOTE(random_state=42)
+    X_train, y_train = smote.fit_resample(X_train, y_train)
+
+    # Scaling
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_val = scaler.transform(X_val)
+    test_scaled = scaler.transform(test)
+
+    # Models
+    models = {
+        "Logistic Regression": LogisticRegression(max_iter=1000),
+        "Decision Tree": DecisionTreeClassifier(random_state=42),
+        "Random Forest": RandomForestClassifier(n_estimators=200, random_state=42)
+    }
+
+    best_model = None
+    best_score = 0
+
+    print("\n🚀 Training Models...\n")
+
+    for name, model in models.items():
+        model.fit(X_train, y_train)
+
+        pred = model.predict(X_val)
+        prob = model.predict_proba(X_val)[:, 1]
+
+        roc = roc_auc_score(y_val, prob)
+
+        print(f"\n=== {name} ===")
+        print(classification_report(y_val, pred))
+        print("ROC-AUC:", roc)
+
+        if roc > best_score:
+            best_score = roc
+            best_model = model
+
+    print("\n🏆 Best Model Selected")
+
+    return best_model, scaler, test_scaled
+
+# ================================
+# 6. PREDICTION + SUBMISSION
+# ================================
+def predict(best_model, test_scaled, test):
+
+    predictions = best_model.predict(test_scaled)
+
+    submission = pd.DataFrame({
+        "Id": range(len(predictions)),
+        "Prediction": predictions
+    })
+
+    submission.to_csv("submission.csv", index=False)
+
+    print("\n✅ Submission file saved successfully!")
+
+# ================================
+# 7. MAIN EXECUTION
+# ================================
+if __name__ == "__main__":
+
+    print("\n🚀 Credit Scoring Model Started\n")
+
+    X, y, test_clean = preprocess(train, test)
+
+    best_model, scaler, test_scaled = train_models(X, y, test_clean)
+
+    predict(best_model, test_scaled, test_clean)
+
+    print("\n🎯 Project Completed Successfully")
